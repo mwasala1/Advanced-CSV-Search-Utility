@@ -1,0 +1,23 @@
+<Window x:Class="AdvancedCsvSearch.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About Advanced CSV Search Utility" Height="220" Width="450"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="#f0f2f5">
+    <Grid Margin="20">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="Advanced CSV Search Utility" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#2c3e50"/>
+            <TextBlock Text="Version 2.0" FontSize="14" HorizontalAlignment="Center" Margin="0,5,0,15" Foreground="#7f8c8d"/>
+            <Separator Margin="0,0,0,15"/>
+            <TextBlock Text="A collaborative project by:" HorizontalAlignment="Center" FontStyle="Italic" Foreground="#34495e"/>
+            <TextBlock HorizontalAlignment="Center" Margin="0,5,0,0" Foreground="#333">
+                <Run Text="Gemini"/>
+                <Run Text="(development) and" FontStyle="Italic" Foreground="#7f8c8d"/>
+                <Run Text="mwasala"/>
+                <Run Text="(direction &amp; testing)." FontStyle="Italic" Foreground="#7f8c8d"/>
+            </TextBlock>
+        </StackPanel>
+    </Grid>
+</Window>

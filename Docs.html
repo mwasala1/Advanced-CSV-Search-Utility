@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced CSV Search Utility - User Manual</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #fdfdfd;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 25px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        header {
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        header h1 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 2.5em;
+        }
+        header p {
+            margin: 5px 0 0;
+            color: #7f8c8d;
+            font-size: 1.1em;
+        }
+        nav {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        nav h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #34495e;
+        }
+        nav ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        nav ul li a {
+            text-decoration: none;
+            color: #3498db;
+            font-weight: 500;
+            display: block;
+            padding: 5px 0;
+        }
+        nav ul li a:hover {
+            text-decoration: underline;
+        }
+        h2, h3 {
+            color: #34495e;
+            border-bottom: 1px solid #ecf0f1;
+            padding-bottom: 8px;
+            margin-top: 35px;
+        }
+        code {
+            background-color: #ecf0f1;
+            color: #c0392b;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.95em;
+        }
+        .note {
+            background-color: #e8f4fd;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: 600;
+        }
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 0.9em;
+            color: #95a5a6;
+        }
+        .button-desc {
+            font-weight: bold;
+            font-family: "Courier New", Courier, monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Advanced CSV Search Utility</h1>
+            <p>Version 2.0 - User Manual</p>
+            <p>Last Updated: July 11, 2025</p>
+        </header>
+
+        <nav id="toc">
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#introduction">1. Introduction</a></li>
+                <li><a href="#getting-started">2. Getting Started</a></li>
+                <li><a href="#building-queries">3. Building a Search Query</a></li>
+                <li><a href="#search-types">4. Understanding Search Types</a></li>
+                <li><a href="#advanced-queries">5. Advanced Queries with Grouping</a></li>
+                <li><a href="#query-management">6. Saving and Loading Queries</a></li>
+                <li><a href="#execution">7. Executing the Search and Exporting Results</a></li>
+            </ul>
+        </nav>
+
+        <section id="introduction">
+            <h2>1. Introduction</h2>
+            <p>
+                The Advanced CSV Search Utility is a powerful desktop application designed to streamline the process of searching for data within CSV files that are compressed inside ZIP archives. It eliminates the need for manual extraction and provides a flexible, user-friendly interface to build complex, reusable search queries.
+            </p>
+            <p>
+                This tool is ideal for developers, data analysts, and support engineers who need to quickly investigate logs or data sets distributed across multiple compressed files. Version 2.0 introduces powerful new features including numeric and date-range searching, query management, and automatic column discovery.
+            </p>
+        </section>
+
+        <section id="getting-started">
+            <h2>2. Getting Started</h2>
+            <p>The main interface is divided into sections to guide you through the search process.</p>
+            
+            <h3>Search Configuration</h3>
+            <p>This is the first step in any search operation.</p>
+            <ul>
+                <li><span class="button-desc">📁 Browse...</span>: Click this button to open a folder selection dialog. Choose the root folder that contains your ZIP archives. The search will begin here.</li>
+                <li><span class="button-desc">🔄 Refresh Columns</span>: After selecting a folder, click this button. The application will scan the first CSV file it finds and automatically populate the "Column Name" dropdown menus in the criteria builder. This helps prevent typos and speeds up query creation.</li>
+                <li><strong>Recursive Search Toggle</strong>: Located on the right-hand side, this option extends the search to include all subfolders within the selected root folder.</li>
+            </ul>
+        </section>
+
+        <section id="building-queries">
+            <h2>3. Building a Search Query</h2>
+            <p>The core of the application is the criteria builder. You can add multiple rows to create simple or complex logical statements.</p>
+            
+            <h3>Anatomy of a Criterion Row</h3>
+            <p>Each row defines a single condition and consists of the following controls from left to right:</p>
+            <ol>
+                <li><strong>Grouping Controls (< >)</strong>: Used to indent or outdent a row to create logical groups. See the <a href="#advanced-queries">Advanced Queries</a> section for details.</li>
+                <li><strong>Logical Operator (AND/OR)</strong>: Appears on the second row and beyond. This links the current row to the result of all the rows above it.</li>
+                <li><strong>NOT Checkbox</strong>: Inverts the result of the current row. If checked, the row will match only if the condition is false. (e.g., `NOT` `Country` `Exact Match` `Canada`).</li>
+                <li><strong>Column Name</strong>: A dropdown list of discovered column headers. You can also type a custom column name.</li>
+                <li><strong>Search Type</strong>: A dropdown list to select the matching logic (e.g., Exact Match, Regex, Is Between Dates).</li>
+                <li><strong>Value Field(s)</strong>: One or two text boxes where you enter the value(s) to search for. The second box only appears for range-based searches.</li>
+                <li><strong>Remove Button (-)</strong>: Deletes the current criterion row.</li>
+            </ol>
+        </section>
+        
+        <section id="search-types">
+            <h2>4. Understanding Search Types</h2>
+            <p>Choosing the correct search type is crucial for getting the results you need. The logic is case-insensitive for all text-based searches.</p>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Search Type</th>
+                            <th>Description</th>
+                            <th>Example Value(s)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Exact Match</strong></td>
+                            <td>Finds rows where the cell value is exactly equal to the provided text.</td>
+                            <td><code>Europe</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Is One Of (List)</strong></td>
+                            <td>Finds rows where the cell value is an exact match for any of the items in a list. <strong>The only allowed separator is a comma (<code>,</code>).</strong></td>
+                            <td><code>Europe,Asia,Canada</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Regex</strong></td>
+                            <td>Treats the value as a Regular Expression pattern for advanced text matching.</td>
+                            <td><code>^ERR-[0-9]+</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Greater Than (>)</strong></td>
+                            <td>Finds rows where the cell value, interpreted as a number, is greater than the provided number.</td>
+                            <td><code>1000</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Less Than (<)</strong></td>
+                            <td>Finds rows where the cell value, interpreted as a number, is less than the provided number.</td>
+                            <td><code>50.25</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Is Between</strong></td>
+                            <td>Finds rows where the cell value, interpreted as a number, is between the two provided numbers (inclusive).</td>
+                            <td>Value1: <code>100</code>, Value2: <code>200</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>On Date</strong></td>
+                            <td>Finds rows where the cell's date part matches the provided date. Time is ignored.</td>
+                            <td><code>2025-07-10</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Before Date</strong></td>
+                            <td>Finds rows where the cell's date is strictly before the provided date.</td>
+                            <td><code>2025-01-01</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>After Date</strong></td>
+                            <td>Finds rows where the cell's date is strictly after the provided date.</td>
+                            <td><code>2024-12-31</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Is Between Dates</strong></td>
+                            <td>Finds rows where the cell's date is between the two provided dates (inclusive). Time is ignored.</td>
+                            <td>Value1: <code>2025-01-01</code>, Value2: <code>2025-01-31</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>Practical Regex Examples</h3>
+            <p>Regex is a powerful tool for finding patterns. Here are some common use cases:</p>
+            <ul>
+                <li><strong>Contains Substring:</strong> To find any cell containing "rope", simply use <code>rope</code> as the value.</li>
+                <li><strong>Starts With:</strong> To find values starting with "Pro", use <code>^Pro</code>. The <code>^</code> anchors the pattern to the start of the string.</li>
+                <li><strong>Ends With:</strong> To find values ending with "Failed", use <code>Failed$</code>. The <code>$</code> anchors the pattern to the end of the string.</li>
+                <li><strong>Specific Format (e.g., IP Address):</strong> To find a pattern like an IP address, you could use <code>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}</code>.</li>
+            </ul>
+
+            <div class="note">
+                <strong>Note on Dates:</strong> The date parsing is flexible and culture-aware, meaning it can recognize many common formats (e.g., <code>YYYY-MM-DD</code>, <code>MM/DD/YYYY</code>, <code>DD-Mon-YYYY</code>, and ISO8601 like <code>2025-07-10T11:22:33Z</code>). For best results, it is recommended to use the <strong>YYYY-MM-DD</strong> format.
+            </div>
+        </section>
+
+        <section id="advanced-queries">
+            <h2>5. Advanced Queries with Grouping</h2>
+            <p>
+                The true power of the utility comes from its ability to group criteria. By using the <span class="button-desc">&gt;</span> (Indent) and <span class="button-desc">&lt;</span> (Outdent) buttons, you can create nested logical statements.
+            </p>
+            <p>
+                The evaluation logic follows a simple rule: an indented block is treated as a single "term" in the expression of the level above it. If you remove the first item in a group, the next item will have its indentation reset automatically to prevent invalid queries.
+            </p>
+            <h3>Example: (A OR B) AND C</h3>
+            <p>
+                Imagine you want to find all orders where the `Region` is "Europe" OR "Asia", AND the `Status` is "Shipped". You would set up the criteria like this:
+            </p>
+            <ol>
+                <li><strong>Row 1:</strong> `Region` | `Is One Of (List)` | `Europe,Asia`</li>
+                <li><strong>Row 2 (Indented):</strong> `OR` is not needed here as the first row handles it.</li>
+                <li><strong>Row 3:</strong> `AND` | `Status` | `Exact Match` | `Shipped`</li>
+            </ol>
+            <p>A better way to write this specific query using grouping would be:</p>
+            <ol>
+                <li><strong>Row 1:</strong> `Region` | `Exact Match` | `Europe`</li>
+                <li><strong>Row 2:</strong> `OR` | `Region` | `Exact Match` | `Asia`</li>
+                <li><strong>Row 3 (Outdented):</strong> `AND` | `Status` | `Exact Match` | `Shipped`</li>
+            </ol>
+            <p>To achieve `(Europe OR Asia) AND Shipped`, you would indent rows 1 and 2, but the logic evaluates sequentially without operator precedence, so the first example is simpler.</p>
+        </section>
+
+        <section id="query-management">
+            <h2>6. Saving and Loading Queries</h2>
+            <p>To save time, you can save and load your entire set of criteria.</p>
+            <ul>
+                <li><span class="button-desc">💾 Save Query</span>: Saves the current set of criteria rows (including operators, values, and indentation) to a <code>.json</code> file.</li>
+                <li><span class="button-desc">📂 Load Query</span>: Clears the current criteria and loads a previously saved query from a <code>.json</code> file.</li>
+            </ul>
+        </section>
+
+        <section id="execution">
+            <h2>7. Executing the Search and Exporting Results</h2>
+            <p>Once your query is defined, you can execute the search.</p>
+            <ul>
+                <li><span class="button-desc">▶ Start Search</span>: This button becomes enabled once you have selected a folder and defined at least one valid criterion. Clicking it begins the search process.</li>
+                <li><span class="button-desc">⏹ Cancel Search</span>: Appears during a search. Click to safely stop the current operation.</li>
+                <li><strong>Progress Bar</strong>: Provides visual feedback on the search progress through the discovered ZIP files.</li>
+                <li><strong>Status Text</strong>: The bar at the bottom of the window provides real-time updates on the current operation, results found, or any errors encountered.</li>
+                <li><span class="button-desc">📄 Export Results...</span>: After a search completes, if any matching rows were found, this button becomes enabled. Clicking it will open a "Save File" dialog, allowing you to save all matching rows to a new, single CSV file. The exported file will include all original columns, prepended with two new columns: `Source ZIP Archive` and `Source CSV File`.</li>
+            </ul>
+        </section>
+
+        <footer>
+            <p>Advanced CSV Search Utility v2.0</p>
+            <p>A collaborative project by Gemini (development) and mwasala (direction & testing).</p>
+        </footer>
+    </div>
+</body>
+</html>
