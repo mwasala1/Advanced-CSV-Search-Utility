@@ -181,6 +181,7 @@ namespace AdvancedCsvSearch
             {
                 var criteria = new List<SearchCriterion>(SearchCriteria.Where(c => !string.IsNullOrWhiteSpace(c.ColumnName) && !string.IsNullOrWhiteSpace(c.Value)));
                 var searchOption = IsRecursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                int totalMatches = 0;
 
                 await Task.Run(async () =>
                 {
@@ -196,7 +197,7 @@ namespace AdvancedCsvSearch
                             foreach (var entry in archive.Entries.Where(e => e.FullName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)))
                             {
                                 if (token.IsCancellationRequested) break;
-                                await ProcessCsvEntry(entry, Path.GetFileName(zipPath), criteria, token);
+                                totalMatches += await ProcessCsvEntry(entry, Path.GetFileName(zipPath), criteria, token);
                             }
                         }
                         catch { /* Skip corrupt zips */ }
@@ -205,7 +206,7 @@ namespace AdvancedCsvSearch
                     }
                 }, token);
 
-                StatusText = $"Search complete. Found {_resultsToExport.Count} matching rows.";
+                StatusText = $"Search complete. Found {totalMatches} matching rows.";
             }
             catch (OperationCanceledException) { StatusText = "Search canceled."; }
             finally
@@ -215,12 +216,13 @@ namespace AdvancedCsvSearch
             }
         }
 
-        private async Task ProcessCsvEntry(ZipArchiveEntry entry, string zipName, List<SearchCriterion> criteria, CancellationToken token)
+        private async Task<int> ProcessCsvEntry(ZipArchiveEntry entry, string zipName, List<SearchCriterion> criteria, CancellationToken token)
         {
+            int localMatches = 0;
             using var stream = entry.Open();
             using var reader = new StreamReader(stream);
             var headerLine = await reader.ReadLineAsync();
-            if (headerLine == null) return;
+            if (headerLine == null) return 0;
 
             char delimiter = DetectDelimiter(headerLine);
             var headers = ParseCsvLine(headerLine, delimiter);
@@ -232,6 +234,7 @@ namespace AdvancedCsvSearch
                 if (index != -1) colIndexMap[criterion.ColumnName!] = index;
             }
 
+            bool fileHeaderAdded = false;
             while (!reader.EndOfStream)
             {
                 if (token.IsCancellationRequested) break;
@@ -241,13 +244,18 @@ namespace AdvancedCsvSearch
                 var values = ParseCsvLine(line, delimiter);
                 if (DoesRowMatch(values, criteria, colIndexMap))
                 {
-                    if (_resultsToExport.Count == 0)
+                    if (!fileHeaderAdded)
                     {
-                        _resultsToExport.Add(new[] { "Source ZIP", "Source CSV" }.Concat(headers).ToArray());
+                        if (_resultsToExport.Count > 0) _resultsToExport.Add(new[] { "" });
+                        _resultsToExport.Add(new[] { "FILE_MARKER", $"--- START: {zipName} / {entry.FullName} ---" });
+                        _resultsToExport.Add(headers);
+                        fileHeaderAdded = true;
                     }
-                    _resultsToExport.Add(new[] { zipName, entry.FullName }.Concat(values).ToArray());
+                    _resultsToExport.Add(values);
+                    localMatches++;
                 }
             }
+            return localMatches;
         }
 
         private void SaveResultsToCsv(string filePath)
@@ -340,8 +348,14 @@ namespace AdvancedCsvSearch
             if (SearchCriteria.Any()) SearchCriteria[0].IsNotFirst = false;
         }
 
-        private void IndentCriterion(SearchCriterion c) { if (c.IndentLevel < 5) c.IndentLevel++; }
-        private bool CanIndentCriterion(SearchCriterion c) => c.IndentLevel < 5;
+        private void IndentCriterion(SearchCriterion c) { if (CanIndentCriterion(c)) c.IndentLevel++; }
+        private bool CanIndentCriterion(SearchCriterion c)
+        {
+            int index = SearchCriteria.IndexOf(c);
+            if (index <= 0) return false;
+            var prev = SearchCriteria[index - 1];
+            return c.IndentLevel < 5 && c.IndentLevel <= prev.IndentLevel;
+        }
         private void OutdentCriterion(SearchCriterion c) { if (c.IndentLevel > 0) c.IndentLevel--; }
         private bool CanOutdentCriterion(SearchCriterion c) => c.IndentLevel > 0;
 
