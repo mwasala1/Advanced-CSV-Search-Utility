@@ -232,7 +232,6 @@ namespace AdvancedCsvSearch
                 if (index != -1) colIndexMap[criterion.ColumnName!] = index;
             }
 
-            bool headerAdded = false;
             while (!reader.EndOfStream)
             {
                 if (token.IsCancellationRequested) break;
@@ -242,10 +241,9 @@ namespace AdvancedCsvSearch
                 var values = ParseCsvLine(line, delimiter);
                 if (DoesRowMatch(values, criteria, colIndexMap))
                 {
-                    if (!headerAdded)
+                    if (_resultsToExport.Count == 0)
                     {
                         _resultsToExport.Add(new[] { "Source ZIP", "Source CSV" }.Concat(headers).ToArray());
-                        headerAdded = true;
                     }
                     _resultsToExport.Add(new[] { zipName, entry.FullName }.Concat(values).ToArray());
                 }
@@ -269,6 +267,90 @@ namespace AdvancedCsvSearch
                 sb.AppendLine(line);
             }
             File.WriteAllText(filePath, sb.ToString());
+        }
+
+        private void SearchCriteria_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (e.NewItems != null)
+            {
+                foreach (SearchCriterion item in e.NewItems)
+                    item.PropertyChanged += SearchCriterion_PropertyChanged;
+            }
+            if (e.OldItems != null)
+            {
+                foreach (SearchCriterion item in e.OldItems)
+                    item.PropertyChanged -= SearchCriterion_PropertyChanged;
+            }
+            RaisePropertyChanged(nameof(IsSearchEnabled));
+            ((RelayCommand)SaveQueryCommand).RaiseCanExecuteChanged();
+        }
+
+        private void SearchCriterion_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            RaisePropertyChanged(nameof(IsSearchEnabled));
+        }
+
+        private void SaveQuery()
+        {
+            var dialog = new SaveFileDialog { Filter = "JSON Files|*.json", FileName = "query.json" };
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    var json = JsonSerializer.Serialize(SearchCriteria, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(dialog.FileName, json);
+                    StatusText = "Query saved.";
+                }
+                catch (Exception ex) { StatusText = $"Error saving: {ex.Message}"; }
+            }
+        }
+
+        private void LoadQuery()
+        {
+            var dialog = new OpenFileDialog { Filter = "JSON Files|*.json" };
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    var json = File.ReadAllText(dialog.FileName);
+                    var items = JsonSerializer.Deserialize<ObservableCollection<SearchCriterion>>(json);
+                    if (items != null)
+                    {
+                        SearchCriteria.Clear();
+                        foreach (var item in items) SearchCriteria.Add(item);
+                        StatusText = "Query loaded.";
+                    }
+                }
+                catch (Exception ex) { StatusText = $"Error loading: {ex.Message}"; }
+            }
+        }
+
+        private void ShowAbout() => MessageBox.Show("Advanced CSV Search\n\nSearch through CSVs inside ZIP files.", "About");
+
+        private void AddCriterion()
+        {
+            var c = new SearchCriterion();
+            if (SearchCriteria.Any()) c.IsNotFirst = true;
+            SearchCriteria.Add(c);
+        }
+
+        private void RemoveCriterion(SearchCriterion c)
+        {
+            SearchCriteria.Remove(c);
+            if (SearchCriteria.Any()) SearchCriteria[0].IsNotFirst = false;
+        }
+
+        private void IndentCriterion(SearchCriterion c) { if (c.IndentLevel < 5) c.IndentLevel++; }
+        private bool CanIndentCriterion(SearchCriterion c) => c.IndentLevel < 5;
+        private void OutdentCriterion(SearchCriterion c) { if (c.IndentLevel > 0) c.IndentLevel--; }
+        private bool CanOutdentCriterion(SearchCriterion c) => c.IndentLevel > 0;
+
+        private void CancelSearch() => _cancellationTokenSource?.Cancel();
+
+        private void ExportResults()
+        {
+            var dialog = new SaveFileDialog { Filter = "CSV Files|*.csv", FileName = "results.csv" };
+            if (dialog.ShowDialog() == true) SaveResultsToCsv(dialog.FileName);
         }
         #endregion
 
@@ -348,130 +430,129 @@ namespace AdvancedCsvSearch
             }
         }
         #endregion
-        
-        #region INotifyPropertyChanged
-        public event PropertyChangedEventHandler? PropertyChanged;
-        protected void RaisePropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-            if (propertyName == nameof(IsSearchEnabled))
-            {
-                Application.Current.Dispatcher.Invoke(() => ((AsyncRelayCommand)StartSearchCommand).RaiseCanExecuteChanged());
-            }
-        }
-        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
-        {
-            if (Equals(storage, value)) return false;
-            storage = value;
-            RaisePropertyChanged(propertyName);
-            return true;
-        }
-        #endregion
-    }
 
-    #region Data Models
-    public class SearchCriterion : INotifyPropertyChanged
-    {
-        private string? _columnName;
-        private SearchType _searchType;
-        private string? _value;
-        private string? _value2;
-        private bool _isNot;
-        private LogicalOperator _logicalOperator;
-        private bool _isNotFirst;
-        private int _indentLevel;
+        #region INotifyPropertyChanged
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void RaisePropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            if (propertyName == nameof(IsSearchEnabled))
+            {
+                Application.Current.Dispatcher.Invoke(() => ((AsyncRelayCommand)StartSearchCommand).RaiseCanExecuteChanged());
+            }
+        }
+        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (Equals(storage, value)) return false;
+            storage = value;
+            RaisePropertyChanged(propertyName);
+            return true;
+        }
+        #endregion
+    }
 
-        public string? ColumnName { get => _columnName; set => SetProperty(ref _columnName, value); }
-        public SearchType SearchType { get => _searchType; set => SetProperty(ref _searchType, value); }
-        public string? Value { get => _value; set => SetProperty(ref _value, value); }
-        public string? Value2 { get => _value2; set => SetProperty(ref _value2, value); }
-        public bool IsNot { get => _isNot; set => SetProperty(ref _isNot, value); }
-        public LogicalOperator LogicalOperator { get => _logicalOperator; set => SetProperty(ref _logicalOperator, value); }
-        public bool IsNotFirst { get => _isNotFirst; set => SetProperty(ref _isNotFirst, value); }
-        public int IndentLevel { get => _indentLevel; set => SetProperty(ref _indentLevel, value); }
+    #region Data Models
+    public class SearchCriterion : INotifyPropertyChanged
+    {
+        private string? _columnName;
+        private SearchType _searchType;
+        private string? _value;
+        private string? _value2;
+        private bool _isNot;
+        private LogicalOperator _logicalOperator;
+        private bool _isNotFirst;
+        private int _indentLevel;
 
-        [JsonIgnore]
-        public List<LogicalOperator> AvailableOperators => new List<LogicalOperator> { LogicalOperator.AND, LogicalOperator.OR };
-        
-        public SearchCriterion() => LogicalOperator = LogicalOperator.AND;
+        public string? ColumnName { get => _columnName; set => SetProperty(ref _columnName, value); }
+        public SearchType SearchType { get => _searchType; set => SetProperty(ref _searchType, value); }
+        public string? Value { get => _value; set => SetProperty(ref _value, value); }
+        public string? Value2 { get => _value2; set => SetProperty(ref _value2, value); }
+        public bool IsNot { get => _isNot; set => SetProperty(ref _isNot, value); }
+        public LogicalOperator LogicalOperator { get => _logicalOperator; set => SetProperty(ref _logicalOperator, value); }
+        public bool IsNotFirst { get => _isNotFirst; set => SetProperty(ref _isNotFirst, value); }
+        public int IndentLevel { get => _indentLevel; set => SetProperty(ref _indentLevel, value); }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-        protected void SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
-        {
-            if (!Equals(storage, value))
-            {
-                storage = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-            }
-        }
-    }
+        [JsonIgnore]
+        public List<LogicalOperator> AvailableOperators => new List<LogicalOperator> { LogicalOperator.AND, LogicalOperator.OR };
+        
+        public SearchCriterion() => LogicalOperator = LogicalOperator.AND;
 
-    public enum SearchType 
-    { 
-        [Description("Exact Match")] ExactMatch, 
-        [Description("Is One Of (List)")] IsOneOf, 
-        [Description("Regex")] Regex,
-        [Description("Greater Than (>)")] GreaterThan,
-        [Description("Less Than (<)")] LessThan,
-        [Description("Is Between")] IsBetween,
-        [Description("On Date")] OnDate,
-        [Description("Before Date")] BeforeDate,
-        [Description("After Date")] AfterDate,
-        [Description("Is Between Dates")] IsBetweenDates
-    }
-    public enum LogicalOperator { AND, OR }
-    #endregion
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (!Equals(storage, value))
+            {
+                storage = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
+        }
+    }
 
-    #region Command Helpers
-    public class RelayCommand : ICommand
-    {
-        private readonly Action _execute;
-        private readonly Func<bool> _canExecute;
-        public event EventHandler? CanExecuteChanged { add { CommandManager.RequerySuggested += value; } remove { CommandManager.RequerySuggested -= value; } }
-        public RelayCommand(Action execute, Func<bool>? canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute ?? (() => true);
-        }
-        public bool CanExecute(object? parameter) => _canExecute();
-        public void Execute(object? parameter) => _execute();
-        public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
-    }
-    public class RelayCommand<T> : ICommand
-    {
-        private readonly Action<T> _execute;
-        private readonly Predicate<T> _canExecute;
-        public event EventHandler? CanExecuteChanged { add { CommandManager.RequerySuggested += value; } remove { CommandManager.RequerySuggested -= value; } }
-        public RelayCommand(Action<T> execute, Predicate<T>? canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute ?? (p => true);
-        }
-        public bool CanExecute(object? parameter) => _canExecute((T)parameter!);
-        public void Execute(object? parameter) => _execute((T)parameter!);
-        public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
-    }
-    public class AsyncRelayCommand : ICommand
-    {
-        private readonly Func<Task> _execute;
-        private readonly Func<bool> _canExecute;
-        private bool _isExecuting;
-        public event EventHandler? CanExecuteChanged { add { CommandManager.RequerySuggested += value; } remove { CommandManager.RequerySuggested -= value; } }
-        public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute ?? (() => true);
-        }
-        public bool CanExecute(object? parameter) => !_isExecuting && _canExecute();
-        public async void Execute(object? parameter)
-        {
-            _isExecuting = true;
-            RaiseCanExecuteChanged();
-            try { await _execute(); }
-            finally { _isExecuting = false; RaiseCanExecuteChanged(); }
-        }
-        public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
-    }
-    #endregion
+    public enum SearchType 
+    { 
+        [Description("Exact Match")] ExactMatch, 
+        [Description("Is One Of (List)")] IsOneOf, 
+        [Description("Regex")] Regex,
+        [Description("Greater Than (>)")] GreaterThan,
+        [Description("Less Than (<)")] LessThan,
+        [Description("Is Between")] IsBetween,
+        [Description("On Date")] OnDate,
+        [Description("Before Date")] BeforeDate,
+        [Description("After Date")] AfterDate,
+        [Description("Is Between Dates")] IsBetweenDates
+    }
+    public enum LogicalOperator { AND, OR }
+    #endregion
+
+    #region Command Helpers
+    public class RelayCommand : ICommand
+    {
+        private readonly Action _execute;
+        private readonly Func<bool> _canExecute;
+        public event EventHandler? CanExecuteChanged { add { CommandManager.RequerySuggested += value; } remove { CommandManager.RequerySuggested -= value; } }
+        public RelayCommand(Action execute, Func<bool>? canExecute = null)
+        {
+            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+            _canExecute = canExecute ?? (() => true);
+        }
+        public bool CanExecute(object? parameter) => _canExecute();
+        public void Execute(object? parameter) => _execute();
+        public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
+    }
+    public class RelayCommand<T> : ICommand
+    {
+        private readonly Action<T> _execute;
+        private readonly Predicate<T> _canExecute;
+        public event EventHandler? CanExecuteChanged { add { CommandManager.RequerySuggested += value; } remove { CommandManager.RequerySuggested -= value; } }
+        public RelayCommand(Action<T> execute, Predicate<T>? canExecute = null)
+        {
+            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+            _canExecute = canExecute ?? (p => true);
+        }
+        public bool CanExecute(object? parameter) => _canExecute((T)parameter!);
+        public void Execute(object? parameter) => _execute((T)parameter!);
+        public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
+    }
+    public class AsyncRelayCommand : ICommand
+    {
+        private readonly Func<Task> _execute;
+        private readonly Func<bool> _canExecute;
+        private bool _isExecuting;
+        public event EventHandler? CanExecuteChanged { add { CommandManager.RequerySuggested += value; } remove { CommandManager.RequerySuggested -= value; } }
+        public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null)
+        {
+            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+            _canExecute = canExecute ?? (() => true);
+        }
+        public bool CanExecute(object? parameter) => !_isExecuting && _canExecute();
+        public async void Execute(object? parameter)
+        {
+            _isExecuting = true;
+            RaiseCanExecuteChanged();
+            try { await _execute(); }
+            finally { _isExecuting = false; RaiseCanExecuteChanged(); }
+        }
+        public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
+    }
+    #endregion
 }
-
