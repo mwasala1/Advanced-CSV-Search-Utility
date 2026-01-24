@@ -27,7 +27,9 @@ namespace AdvancedCsvSearch
         private string _statusText = "";
         private bool _isSearching;
         private CancellationTokenSource? _cancellationTokenSource;
-        private List<string[]> _resultsToExport = new List<string[]>();
+        private List<object> _resultsToExport = new List<object>();
+        private List<string> _masterHeaders = new List<string>();
+        private HashSet<string> _masterHeadersSet = new HashSet<string>();
         private double _searchProgress;
         private bool _isExportEnabled;
         private char _detectedDelimiter = ','; // Default
@@ -140,27 +142,43 @@ namespace AdvancedCsvSearch
         {
             StatusText = "Scanning for column headers...";
             DiscoveredColumns.Clear();
+            var uniqueHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 var searchOption = IsRecursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                var firstZip = Directory.EnumerateFiles(TargetFolder, "*.zip", searchOption).FirstOrDefault();
-                if (firstZip == null) { StatusText = "No ZIP files found."; return; }
-
-                using var archive = ZipFile.OpenRead(firstZip);
-                var firstCsv = archive.Entries.FirstOrDefault(e => e.FullName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase));
-                if (firstCsv == null) { StatusText = "No CSV files found in first ZIP."; return; }
-
-                using var stream = firstCsv.Open();
-                using var reader = new StreamReader(stream);
-                var headerLine = await reader.ReadLineAsync();
-
-                if (headerLine != null)
+                
+                await Task.Run(async () =>
                 {
-                    _detectedDelimiter = DetectDelimiter(headerLine);
-                    var headers = ParseCsvLine(headerLine, _detectedDelimiter);
-                    foreach (var h in headers) DiscoveredColumns.Add(h);
-                    StatusText = $"Discovered {DiscoveredColumns.Count} columns (Delimiter: '{_detectedDelimiter}'). Ready.";
-                }
+                    var zipFiles = Directory.EnumerateFiles(TargetFolder, "*.zip", searchOption);
+                    foreach (var zipPath in zipFiles)
+                    {
+                        try
+                        {
+                            using var archive = ZipFile.OpenRead(zipPath);
+                            foreach (var entry in archive.Entries.Where(e => e.FullName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                using var stream = entry.Open();
+                                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                                var headerLine = await reader.ReadLineAsync();
+                                if (headerLine != null)
+                                {
+                                    char delimiter = DetectDelimiter(headerLine);
+                                    _detectedDelimiter = delimiter;
+                                    var headers = ParseCsvLine(headerLine, delimiter);
+                                    foreach (var h in headers) uniqueHeaders.Add(h);
+                                }
+                            }
+                        }
+                        catch { /* Skip corrupt zips */ }
+                    }
+                });
+
+                foreach (var h in uniqueHeaders.OrderBy(x => x)) DiscoveredColumns.Add(h);
+                
+                if (DiscoveredColumns.Count > 0)
+                    StatusText = $"Discovered {DiscoveredColumns.Count} unique columns. Ready.";
+                else
+                    StatusText = "No CSV columns found.";
             }
             catch (Exception ex) { StatusText = $"Error discovering columns: {ex.Message}"; }
         }
@@ -170,6 +188,10 @@ namespace AdvancedCsvSearch
             IsSearching = true;
             IsExportEnabled = false;
             _resultsToExport.Clear();
+            _masterHeaders.Clear();
+            _masterHeadersSet.Clear();
+            _masterHeadersSet.Add("Source ZIP"); _masterHeaders.Add("Source ZIP");
+            _masterHeadersSet.Add("Source CSV"); _masterHeaders.Add("Source CSV");
             SearchProgress = 0;
             _cancellationTokenSource = new CancellationTokenSource();
             var token = _cancellationTokenSource.Token;
@@ -220,12 +242,19 @@ namespace AdvancedCsvSearch
         {
             int localMatches = 0;
             using var stream = entry.Open();
-            using var reader = new StreamReader(stream);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             var headerLine = await reader.ReadLineAsync();
             if (headerLine == null) return 0;
 
             char delimiter = DetectDelimiter(headerLine);
             var headers = ParseCsvLine(headerLine, delimiter);
+
+            int prevHeaderCount = _masterHeaders.Count;
+            foreach (var h in headers)
+            {
+                if (_masterHeadersSet.Add(h)) _masterHeaders.Add(h);
+            }
+            bool schemaChanged = _masterHeaders.Count > prevHeaderCount;
             
             var colIndexMap = new Dictionary<string, int>();
             foreach (var criterion in criteria)
@@ -248,10 +277,18 @@ namespace AdvancedCsvSearch
                     {
                         if (_resultsToExport.Count > 0) _resultsToExport.Add(new[] { "" });
                         _resultsToExport.Add(new[] { "FILE_MARKER", $"--- START: {zipName} / {entry.FullName} ---" });
-                        _resultsToExport.Add(headers);
+                        if (schemaChanged)
+                        {
+                            _resultsToExport.Add(new[] { "SCHEMA_CHANGE", "New columns detected in this file..." });
+                        }
                         fileHeaderAdded = true;
                     }
-                    _resultsToExport.Add(values);
+                    
+                    var rowData = new Dictionary<string, string>();
+                    rowData["Source ZIP"] = zipName;
+                    rowData["Source CSV"] = entry.FullName;
+                    for (int i = 0; i < headers.Length && i < values.Length; i++) rowData[headers[i]] = values[i];
+                    _resultsToExport.Add(rowData);
                     localMatches++;
                 }
             }
@@ -261,20 +298,29 @@ namespace AdvancedCsvSearch
         private void SaveResultsToCsv(string filePath)
         {
             var sb = new StringBuilder();
-            foreach (var rowArray in _resultsToExport)
+            sb.AppendLine(string.Join(",", _masterHeaders.Select(EscapeCsv)));
+
+            foreach (var item in _resultsToExport)
             {
-                var line = string.Join(",", rowArray.Select(field =>
+                if (item is string[] marker)
                 {
-                    // Only wrap in quotes if the data contains a comma or existing quotes
-                    if (field.Contains(",") || field.Contains("\"") || field.Contains("\n"))
-                    {
-                        return $"\"{field.Replace("\"", "\"\"")}\"";
-                    }
-                    return field;
-                }));
-                sb.AppendLine(line);
+                    sb.AppendLine(string.Join(",", marker.Select(EscapeCsv)));
+                }
+                else if (item is Dictionary<string, string> row)
+                {
+                    var line = _masterHeaders.Select(h => row.TryGetValue(h, out var val) ? EscapeCsv(val) : "");
+                    sb.AppendLine(string.Join(",", line));
+                }
             }
             File.WriteAllText(filePath, sb.ToString());
+        }
+
+        private string EscapeCsv(string field)
+        {
+            if (string.IsNullOrEmpty(field)) return "";
+            if (field.Contains(",") || field.Contains("\"") || field.Contains("\n"))
+                return $"\"{field.Replace("\"", "\"\"")}\"";
+            return field;
         }
 
         private void SearchCriteria_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -419,11 +465,11 @@ namespace AdvancedCsvSearch
 
         private bool EvaluateSingleCriterion(SearchCriterion criterion)
         {
-            if (string.IsNullOrEmpty(criterion.ColumnName) || 
-                !_colIndexMapForEval.TryGetValue(criterion.ColumnName, out var colIndex) || 
-                colIndex >= _valuesForEval.Length) return false;
+            if (string.IsNullOrEmpty(criterion.ColumnName)) return false;
+            if (!_colIndexMapForEval.TryGetValue(criterion.ColumnName, out var colIndex)) return false;
 
-            bool result = CheckCriterion(_valuesForEval[colIndex], criterion);
+            string cellValue = (colIndex < _valuesForEval.Length) ? _valuesForEval[colIndex] : "";
+            bool result = CheckCriterion(cellValue, criterion);
             return criterion.IsNot ? !result : result;
         }
 
