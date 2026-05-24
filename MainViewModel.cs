@@ -22,6 +22,7 @@ namespace AdvancedCsvSearch
     public class MainViewModel : INotifyPropertyChanged
     {
         #region Fields
+        private const int MaxResultsLimit = 100000;
         private string _targetFolder = "";
         private bool _isRecursive;
         private string _statusText = "";
@@ -79,7 +80,7 @@ namespace AdvancedCsvSearch
             StartSearchCommand = new AsyncRelayCommand(SearchAsync, () => IsSearchEnabled);
             CancelSearchCommand = new RelayCommand(CancelSearch);
             ExportResultsCommand = new RelayCommand(ExportResults, () => IsExportEnabled);
-            
+
             AddCriterion();
             StatusText = "Ready. Please select a folder and define your search criteria.";
         }
@@ -146,7 +147,7 @@ namespace AdvancedCsvSearch
             try
             {
                 var searchOption = IsRecursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                
+
                 await Task.Run(async () =>
                 {
                     var zipFiles = Directory.EnumerateFiles(TargetFolder, "*.zip", searchOption);
@@ -174,7 +175,7 @@ namespace AdvancedCsvSearch
                 });
 
                 foreach (var h in uniqueHeaders.OrderBy(x => x)) DiscoveredColumns.Add(h);
-                
+
                 if (DiscoveredColumns.Count > 0)
                     StatusText = $"Discovered {DiscoveredColumns.Count} unique columns. Ready.";
                 else
@@ -212,6 +213,8 @@ namespace AdvancedCsvSearch
                     foreach (var zipPath in zipFiles)
                     {
                         if (token.IsCancellationRequested) break;
+                        if (_resultsToExport.Count >= MaxResultsLimit) break;
+
                         statusProgress.Report($"Searching in: {Path.GetFileName(zipPath)}");
                         try
                         {
@@ -219,6 +222,8 @@ namespace AdvancedCsvSearch
                             foreach (var entry in archive.Entries.Where(e => e.FullName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)))
                             {
                                 if (token.IsCancellationRequested) break;
+                                if (_resultsToExport.Count >= MaxResultsLimit) break;
+
                                 totalMatches += await ProcessCsvEntry(entry, Path.GetFileName(zipPath), criteria, token);
                             }
                         }
@@ -228,7 +233,14 @@ namespace AdvancedCsvSearch
                     }
                 }, token);
 
-                StatusText = $"Search complete. Found {totalMatches} matching rows.";
+                if (_resultsToExport.Count >= MaxResultsLimit)
+                {
+                    StatusText = $"Search stopped early. Reached maximum limit of {MaxResultsLimit} results.";
+                }
+                else
+                {
+                    StatusText = $"Search complete. Found {totalMatches} matching rows.";
+                }
             }
             catch (OperationCanceledException) { StatusText = "Search canceled."; }
             finally
@@ -255,7 +267,7 @@ namespace AdvancedCsvSearch
                 if (_masterHeadersSet.Add(h)) _masterHeaders.Add(h);
             }
             bool schemaChanged = _masterHeaders.Count > prevHeaderCount;
-            
+
             var colIndexMap = new Dictionary<string, int>();
             foreach (var criterion in criteria)
             {
@@ -267,6 +279,13 @@ namespace AdvancedCsvSearch
             while (!reader.EndOfStream)
             {
                 if (token.IsCancellationRequested) break;
+
+                // Security fix: Enforce a limit on the number of results to prevent Out Of Memory
+                if (_resultsToExport.Count >= MaxResultsLimit)
+                {
+                    break;
+                }
+
                 var line = await reader.ReadLineAsync();
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
@@ -283,7 +302,7 @@ namespace AdvancedCsvSearch
                         }
                         fileHeaderAdded = true;
                     }
-                    
+
                     var rowData = new Dictionary<string, string>();
                     rowData["Source ZIP"] = zipName;
                     rowData["Source CSV"] = entry.FullName;
@@ -439,9 +458,9 @@ namespace AdvancedCsvSearch
             {
                 var currentCriterion = _criteriaForEval[_evalIndex];
                 if (currentCriterion.IndentLevel < level) break;
-                
+
                 var op = currentCriterion.LogicalOperator;
-                // Note: We do NOT increment _evalIndex here. 
+                // Note: We do NOT increment _evalIndex here.
                 // ParseTerm consumes the next item and moves the pointer.
                 bool right = ParseTerm(level);
                 left = (op == LogicalOperator.AND) ? (left && right) : (left || right);
