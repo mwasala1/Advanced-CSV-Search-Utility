@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -169,7 +170,11 @@ namespace AdvancedCsvSearch
                                 }
                             }
                         }
-                        catch { /* Skip corrupt zips */ }
+                        catch (Exception ex)
+                        {
+                            /* Skip corrupt zips */
+                            Debug.WriteLine($"Skipping corrupt zip '{zipPath}': {ex.Message}");
+                        }
                     }
                 });
 
@@ -222,7 +227,11 @@ namespace AdvancedCsvSearch
                                 totalMatches += await ProcessCsvEntry(entry, Path.GetFileName(zipPath), criteria, token);
                             }
                         }
-                        catch { /* Skip corrupt zips */ }
+                        catch (Exception ex)
+                        {
+                            /* Skip corrupt zips */
+                            Debug.WriteLine($"Skipping corrupt zip '{zipPath}': {ex.Message}");
+                        }
                         filesProcessed++;
                         barProgress.Report((double)filesProcessed / zipFiles.Length * 100);
                     }
