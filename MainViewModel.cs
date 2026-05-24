@@ -202,6 +202,23 @@ namespace AdvancedCsvSearch
             try
             {
                 var criteria = new List<SearchCriterion>(SearchCriteria.Where(c => !string.IsNullOrWhiteSpace(c.ColumnName) && !string.IsNullOrWhiteSpace(c.Value)));
+
+                foreach (var criterion in criteria)
+                {
+                    if (criterion.SearchType == SearchType.Regex && !string.IsNullOrEmpty(criterion.Value))
+                    {
+                        try
+                        {
+                            _ = Regex.Match("", criterion.Value, RegexOptions.IgnoreCase);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            StatusText = $"Invalid Regex pattern: {ex.Message}";
+                            return;
+                        }
+                    }
+                }
+
                 var searchOption = IsRecursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
                 int totalMatches = 0;
 
@@ -482,7 +499,7 @@ namespace AdvancedCsvSearch
             {
                 case SearchType.ExactMatch: return cellValue.Equals(val1, StringComparison.OrdinalIgnoreCase);
                 case SearchType.IsOneOf: return val1.Split(',').Any(v => cellValue.Equals(v.Trim(), StringComparison.OrdinalIgnoreCase));
-                case SearchType.Regex: try { return Regex.IsMatch(cellValue, val1, RegexOptions.IgnoreCase); } catch { return false; }
+                case SearchType.Regex: return Regex.IsMatch(cellValue, val1, RegexOptions.IgnoreCase);
                 case SearchType.GreaterThan: if (double.TryParse(cellValue, out double n1) && double.TryParse(val1, out double n2)) return n1 > n2; return false;
                 case SearchType.LessThan: if (double.TryParse(cellValue, out double n3) && double.TryParse(val1, out double n4)) return n3 < n4; return false;
                 case SearchType.IsBetween: if (double.TryParse(cellValue, out double nb) && double.TryParse(val1, out double nb1) && double.TryParse(val2, out double nb2)) return nb >= nb1 && nb <= nb2; return false;
